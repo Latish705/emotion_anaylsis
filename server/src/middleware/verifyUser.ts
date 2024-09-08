@@ -13,8 +13,13 @@ const validateUser = async (
       return res.status(401).json({ error: "Access Denied" });
       console.log("Token:", token);
     }
-    const decodedUser = await jwt.verify(token, process.env.REFRESH_TOKEN!);
-    const user = User.findById(decodedUser);
+    const decodedUser = await jwt.verify(
+      token,
+      process.env.REFRESH_TOKEN_SECRET!
+    );
+    //@ts-ignore
+    const user = await User.findById(decodedUser._id);
+
     //@ts-ignore
     req.user = user;
     next();

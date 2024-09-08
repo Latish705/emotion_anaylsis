@@ -6,7 +6,7 @@ const connectDB = async () => {
     console.log("Database connected successfully ", conn.connection.host);
     return;
   } catch (error: any) {
-    console.log("Error connecting the database");
+    console.log("Error connecting the database", error.message);
   }
 };
 

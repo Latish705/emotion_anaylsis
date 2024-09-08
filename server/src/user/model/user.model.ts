@@ -7,8 +7,7 @@ export interface IUser extends Document {
   email: string;
   password: string;
   name: string;
-  emotion: number;
-  description: string;
+
   accessToken: string;
   refreshToken: string;
   comparePassword: (password: string) => Boolean;
@@ -30,12 +29,7 @@ const userSchema = new Schema<IUser>(
       type: String,
       required: true,
     },
-    emotion: {
-      type: Number,
-    },
-    description: {
-      type: String,
-    },
+
     refreshToken: {
       type: String,
     },
@@ -54,7 +48,7 @@ userSchema.methods.comparePassword = async function (password: string) {
   return bcrypt.compare(password, this.password);
 };
 
-userSchema.methods.generateAccessToken = async function () {
+userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     { _id: this.id, name: this.name, email: this.email },
     process.env.ACCESS_TOKEN_SECRET!,
@@ -64,8 +58,8 @@ userSchema.methods.generateAccessToken = async function () {
   );
 };
 
-userSchema.methods.generateRefreshToken = async function () {
-  return jwt.sign({ _id: this.id }, process.env.REFRESH_TOKEN!, {
+userSchema.methods.generateRefreshToken = function () {
+  return jwt.sign({ _id: this.id }, process.env.REFRESH_TOKEN_SECRET!, {
     expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
   });
 };

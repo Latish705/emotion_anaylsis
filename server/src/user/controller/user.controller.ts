@@ -1,49 +1,67 @@
 import { Request, Response } from "express";
 import User, { IUser } from "../model/user.model";
+import Emotion from "../model/emotion.model";
 
+// Function to generate access and refresh tokens
 const generateAccessAndRefreshToken = async (userId: string) => {
   try {
     const user = await User.findById(userId);
-    const accessToken = user?.generateAccessToken();
-    const refreshToken = user?.generateRefreshToken();
-    if (user) {
-      user.refreshToken = refreshToken as string;
-      await user.save({ validateBeforeSave: false });
-    }
+    if (!user) throw new Error("User not found");
+
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+
     return { accessToken, refreshToken };
   } catch (error: any) {
     console.log("Error generating Access and Refresh token", error.message);
+    throw error;
   }
 };
 
+// Signup function
 export const signup = async (req: Request, res: Response) => {
   try {
-    const { email, name, password }: any = req.body;
+    const {
+      email,
+      name,
+      password,
+    }: { email: string; name: string; password: string } = req.body;
+
     if ([name, password].some((field) => field === "")) {
       return res
         .status(400)
-        .json({ success: false, message: "All fields are requireds" });
+        .json({ success: false, message: "All fields are required" });
     }
-    const exsistingUser = await User.findOne({ email });
-    if (exsistingUser) {
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
       return res
         .status(400)
         .json({ success: false, message: "User exists with this email" });
     }
 
-    const newUser = new User({
-      name,
-      password,
-      email,
-    });
+    const newUser = new User({ name, password, email });
+    await newUser.save();
+
     if (!newUser) {
-      return res.status(200).json({
+      return res.status(500).json({
         success: false,
-        message: "Cannot create user properly try again",
+        message: "Cannot create user properly, try again",
       });
     }
-    const dbUser = await User.findById(newUser.id).select("-password");
-    console.log("New user signup successfully", newUser.id);
+
+    const dbUser = await User.findById(newUser._id).select("-password");
+    if (!dbUser) {
+      return res.status(500).json({
+        success: false,
+        message: "User not found after creation",
+      });
+    }
+
+    console.log("New user signup successfully", newUser._id);
     return res.status(201).json({
       success: true,
       message: "User created successfully",
@@ -51,64 +69,96 @@ export const signup = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.log("Error Signing Up user", error.message);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal Server Error" });
   }
 };
 
+// Login function
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password }: any = req.body;
-    const exsistingUser = await User.findOne({ email });
-    if (!exsistingUser) {
+    const { email, password }: { email: string; password: string } = req.body;
+    const existingUser = await User.findOne({ email });
+
+    if (!existingUser) {
       return res
         .status(400)
         .json({ success: false, message: "Cannot find user with this email" });
     }
-    const isPasswordMatched = await exsistingUser.comparePassword(password);
+
+    const isPasswordMatched = await existingUser.comparePassword(password);
     if (!isPasswordMatched) {
       return res
         .status(400)
         .json({ success: false, message: "Password doesn't match" });
     }
-    const { refreshToken, accessToken }: any =
-      await generateAccessAndRefreshToken(exsistingUser.id);
+
+    const { refreshToken, accessToken } = await generateAccessAndRefreshToken(
+      //@ts-ignore
+      existingUser._id
+    );
     const loggedInUser = await User.findOne({ email }).select(
       "-password -refreshToken"
     );
 
     const options = {
-      http: true,
+      httpOnly: true,
       secure: true,
     };
+
     return res.cookie("refreshToken", refreshToken, options).status(200).json({
       success: true,
       message: "User logged In successfully",
       user: loggedInUser,
+      refreshToken,
     });
   } catch (error: any) {
-    console.log("Error logging in user ", error.message);
+    console.log("Error logging in user", error.message);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal Server Error" });
   }
 };
 
-export const addemotionAndDescription = async (req: Request, res: Response) => {
+// Add emotion and description function
+export const addEmotionAndDescription = async (req: Request, res: Response) => {
   try {
     //@ts-ignore
+    const user = req.user;
     const {
-      user,
       emotion,
       description,
     }: { user: IUser; emotion: number; description: string } = req.body;
-    user.emotion = emotion;
-    user.description = description;
-    user.save({ validateBeforeSave: false });
 
-    console.log(`User: ${user.id} added data`);
-    const dataUser = await User.findById(user.id).select(
+    if ([user, emotion, description].some((field) => field === "")) {
+      return res
+        .status(500)
+        .json({ success: false, message: "All fields are required" });
+    }
+
+    const newEmotion = new Emotion({
+      userId: user._id,
+      emotion,
+      description,
+    });
+    await newEmotion.save();
+
+    console.log(`User: ${user._id} added data`);
+    const updatedUser = await User.findById(user._id).select(
       "-password -refreshToken"
     );
+
     return res.status(201).json({
-      success: false,
+      success: true,
       message: "User data added successfully",
-      user: dataUser,
+      user: updatedUser,
+      emotion: newEmotion,
     });
-  } catch (error: any) {}
+  } catch (error: any) {
+    console.error("Error adding emotion and description:", error.message);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal Server Error" });
+  }
 };
